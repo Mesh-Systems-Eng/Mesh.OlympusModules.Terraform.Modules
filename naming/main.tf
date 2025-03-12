@@ -1,6 +1,4 @@
 # Terraform naming convention module
-# Converted from Bicep version 1.12.1
-
 # Local values (equivalent to Bicep vars)
 locals {
   client_affix_title_case  = "${upper(substr(var.client_affix, 0, 1))}${lower(substr(var.client_affix, 1, length(var.client_affix) - 1))}"
