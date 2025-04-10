@@ -1,11 +1,16 @@
-output "shared_naming_prefix" {
-  value = local.shared_naming_prefix
+// Copyright © 2025 Mesh Systems LLC.  All rights reserved.
+
+output "sharedNamingPrefix" {
+  description = "Shared naming prefix"
+  value       = local.sharedNamingPrefix
 }
 
-output "instance_naming_prefix" {
-  value = local.instance_naming_prefix
+output "instanceNamingPrefix" {
+  description = "Instance naming prefix"
+  value       = local.instanceNamingPrefix
 }
 
-output "shared_resource_names" {
-  value = local.resource_names
+output "sharedResourceNames" {
+  description = "Names for shared resources"
+  value       = local.resourceNames
 }
