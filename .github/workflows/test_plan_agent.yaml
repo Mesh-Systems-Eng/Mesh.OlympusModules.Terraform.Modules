@@ -65,6 +65,15 @@ jobs:
                 "change": {
                   "actions": ["create"]
                 }
+              },
+              {
+                "address": "azurerm_container_app_environment.prod_env",
+                "type": "azurerm_container_app_environment",
+                "change": {
+                  "actions": ["replace"],
+                  "before": { "internal_load_balancer_enabled": false },
+                  "after": { "internal_load_balancer_enabled": true }
+                }
               }
             ]
           }'
@@ -104,11 +113,11 @@ jobs:
 
           # Show result but don't fail the step (so we can test conditional logic)
           if [ "$HTTP_STATUS" = "200" ]; then
-            echo "✅ Safety Gate APPROVED (expected!)"
-            echo "Safe plan with only creates and updates"
+            echo "✅ Safety Gate APPROVED (unexpected!)"
+            echo "This plan should have been blocked due to a risky replacement"
           else
-            echo "❌ Safety Gate BLOCKED (unexpected)"
-            echo "This plan should have been approved"
+            echo "❌ Safety Gate BLOCKED (expected)"
+            echo "Critical issues detected: container app environment replacement"
           fi
 
       - name: Proceed with Deployment (Only if Approved)
@@ -118,8 +127,8 @@ jobs:
           echo "Risk Level: ${{ steps.test-safety-gate.outputs.risk_level }}"
           echo "Summary: ${{ steps.test-safety-gate.outputs.summary }}"
           echo ""
-          echo "✅ This step should run because the plan contains only safe operations!"
-          echo "Creating new resources and updating existing ones is allowed."
+          echo "❌ This step should NOT run because the plan contains a risky replacement!"
+          echo "If you see this message, something is wrong with the safety gate."
 
       - name: Deployment Blocked
         if: steps.test-safety-gate.outputs.decision == 'BLOCK'
@@ -129,18 +138,18 @@ jobs:
           echo "Risk Level: ${{ steps.test-safety-gate.outputs.risk_level }}"
           echo "Summary: ${{ steps.test-safety-gate.outputs.summary }}"
           echo ""
-          echo "❌ This should NOT happen for plans with only safe operations"
+          echo "✅ This is the expected behavior for plans with risky replacements"
 
       - name: Show Test Results
         if: always()
         run: |
           echo "=== TEST RESULTS ==="
-          echo "Expected: APPROVE decision with HTTP 200"
+          echo "Expected: BLOCK decision with HTTP 400"
           echo "Actual Decision: ${{ steps.test-safety-gate.outputs.decision }}"
           echo "Actual Risk Level: ${{ steps.test-safety-gate.outputs.risk_level }}"
           echo ""
-          if [ "${{ steps.test-safety-gate.outputs.decision }}" = "APPROVE" ]; then
-            echo "✅ TEST PASSED: Safety gate correctly approved safe plan"
+          if [ "${{ steps.test-safety-gate.outputs.decision }}" = "BLOCK" ]; then
+            echo "✅ TEST PASSED: Safety gate correctly blocked risky replacement"
           else
-            echo "❌ TEST FAILED: Safety gate should have approved this plan"
+            echo "❌ TEST FAILED: Safety gate should have blocked this plan"
           fi
