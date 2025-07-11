@@ -10,6 +10,7 @@ jobs:
     
     steps:
       - name: Test Safety Gate Agent
+        id: test-safety-gate
         run: |
           # Static test plan (APPROVE case)
           PLAN_JSON='{
