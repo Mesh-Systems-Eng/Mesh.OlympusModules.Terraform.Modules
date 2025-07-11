@@ -43,7 +43,7 @@ jobs:
               \"environment\": \"test\",
               \"source\": \"github-test\"
             }" \
-            "${{ secrets.LOGIC_APP_URL }}")
+            "$LOGIC_APP_URL")
           
           # Extract status and body
           HTTP_STATUS="${RESPONSE: -3}"
