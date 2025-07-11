@@ -1,0 +1,61 @@
+name: Test Terraform Safety Gate
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-safety-gate:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Test Safety Gate Agent
+        run: |
+          # Static test plan (APPROVE case)
+          PLAN_JSON='{
+            "format_version": "1.2",
+            "terraform_version": "1.6.0", 
+            "resource_changes": [
+              {
+                "address": "azurerm_application_gateway.test_gateway",
+                "type": "azurerm_application_gateway",
+                "change": {
+                  "actions": ["update"]
+                }
+              },
+              {
+                "address": "azurerm_virtual_machine.web_vm",
+                "type": "azurerm_virtual_machine",
+                "change": {
+                  "actions": ["update"]
+                }
+              }
+            ]
+          }'
+
+          LOGIC_APP_URL="https://dvaila.azurewebsites.net:443/api/DvTerraformPlanEvaluator/triggers/When_a_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_a_HTTP_request_is_received%2Frun&sv=1.0&sig=1FUBDdM573hX09C8BVrjezktAM6B9rpAyKY7fJewaqs"
+          
+          # Call Logic App
+          RESPONSE=$(curl -s -w "%{http_code}" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"terraform_plan\": $PLAN_JSON,
+              \"environment\": \"test\",
+              \"source\": \"github-test\"
+            }" \
+            "${{ secrets.LOGIC_APP_URL }}")
+          
+          # Extract status and body
+          HTTP_STATUS="${RESPONSE: -3}"
+          RESPONSE_BODY="${RESPONSE%???}"
+          
+          echo "Status: $HTTP_STATUS"
+          echo "Response: $RESPONSE_BODY"
+          
+          # Check result
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "✅ Safety Gate APPROVED"
+          else
+            echo "❌ Safety Gate BLOCKED"
+            exit 1
+          fi
