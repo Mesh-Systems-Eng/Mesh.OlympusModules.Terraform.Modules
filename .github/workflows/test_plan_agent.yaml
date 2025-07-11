@@ -16,15 +16,29 @@ jobs:
             "terraform_version": "1.6.0", 
             "resource_changes": [
               {
-                "address": "azurerm_application_gateway.test_gateway",
-                "type": "azurerm_application_gateway",
+                "address": "azurerm_cosmosdb_account.production_database",
+                "type": "azurerm_cosmosdb_account",
                 "change": {
-                  "actions": ["update"]
+                  "actions": ["delete"]
                 }
               },
               {
-                "address": "azurerm_virtual_machine.web_vm",
-                "type": "azurerm_virtual_machine",
+                "address": "azurerm_key_vault.production_secrets",
+                "type": "azurerm_key_vault",
+                "change": {
+                  "actions": ["delete"]
+                }
+              },
+              {
+                "address": "azurerm_sql_database.customer_data",
+                "type": "azurerm_sql_database",
+                "change": {
+                  "actions": ["delete"]
+                }
+              },
+              {
+                "address": "azurerm_application_gateway.web_gateway",
+                "type": "azurerm_application_gateway",
                 "change": {
                   "actions": ["update"]
                 }
@@ -52,10 +66,49 @@ jobs:
           echo "Status: $HTTP_STATUS"
           echo "Response: $RESPONSE_BODY"
           
-          # Check result
+          # Set outputs for conditional steps
+          echo "decision=$(echo '$RESPONSE_BODY' | jq -r '.decision')" >> $GITHUB_OUTPUT
+          echo "summary=$(echo '$RESPONSE_BODY' | jq -r '.summary')" >> $GITHUB_OUTPUT
+          echo "risk_level=$(echo '$RESPONSE_BODY' | jq -r '.risk_level')" >> $GITHUB_OUTPUT
+
+          # Show result but don't fail the step (so we can test conditional logic)
           if [ "$HTTP_STATUS" = "200" ]; then
-            echo "✅ Safety Gate APPROVED"
+            echo "✅ Safety Gate APPROVED (unexpected!)"
           else
-            echo "❌ Safety Gate BLOCKED"
-            exit 1
+            echo "❌ Safety Gate BLOCKED (expected)"
+            echo "Critical issues detected in the plan"
+          fi
+
+      - name: Proceed with Deployment (Only if Approved)
+        if: steps.test-safety-gate.outputs.decision == 'APPROVE'
+        run: |
+          echo "🚀 Proceeding with Terraform deployment..."
+          echo "Risk Level: ${{ steps.test-safety-gate.outputs.risk_level }}"
+          echo "Summary: ${{ steps.test-safety-gate.outputs.summary }}"
+          echo ""
+          echo "This step should NOT run because the plan contains critical deletions!"
+          echo "If you see this message, something is wrong with the safety gate."
+
+      - name: Deployment Blocked
+        if: steps.test-safety-gate.outputs.decision == 'BLOCK'
+        run: |
+          echo "🛑 Deployment blocked by safety gate"
+          echo "Decision: ${{ steps.test-safety-gate.outputs.decision }}"
+          echo "Risk Level: ${{ steps.test-safety-gate.outputs.risk_level }}"
+          echo "Summary: ${{ steps.test-safety-gate.outputs.summary }}"
+          echo ""
+          echo "✅ This is the expected behavior for plans with critical resource deletions"
+
+      - name: Show Test Results
+        if: always()
+        run: |
+          echo "=== TEST RESULTS ==="
+          echo "Expected: BLOCK decision with HTTP 400"
+          echo "Actual Decision: ${{ steps.test-safety-gate.outputs.decision }}"
+          echo "Actual Risk Level: ${{ steps.test-safety-gate.outputs.risk_level }}"
+          echo ""
+          if [ "${{ steps.test-safety-gate.outputs.decision }}" = "BLOCK" ]; then
+            echo "✅ TEST PASSED: Safety gate correctly blocked dangerous plan"
+          else
+            echo "❌ TEST FAILED: Safety gate should have blocked this plan"
           fi
