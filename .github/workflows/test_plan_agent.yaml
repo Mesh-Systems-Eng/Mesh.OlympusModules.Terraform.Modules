@@ -2,6 +2,7 @@ name: Test Terraform Safety Gate
 
 on:
   workflow_dispatch:
+  push:
 
 jobs:
   test-safety-gate:
