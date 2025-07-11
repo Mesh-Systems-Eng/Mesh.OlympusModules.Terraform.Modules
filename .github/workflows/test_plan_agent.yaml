@@ -17,31 +17,52 @@ jobs:
             "terraform_version": "1.6.0", 
             "resource_changes": [
               {
-                "address": "azurerm_cosmosdb_account.production_database",
-                "type": "azurerm_cosmosdb_account",
-                "change": {
-                  "actions": ["delete"]
-                }
-              },
-              {
-                "address": "azurerm_key_vault.production_secrets",
-                "type": "azurerm_key_vault",
-                "change": {
-                  "actions": ["delete"]
-                }
-              },
-              {
-                "address": "azurerm_sql_database.customer_data",
-                "type": "azurerm_sql_database",
-                "change": {
-                  "actions": ["delete"]
-                }
-              },
-              {
                 "address": "azurerm_application_gateway.web_gateway",
                 "type": "azurerm_application_gateway",
                 "change": {
                   "actions": ["update"]
+                }
+              },
+              {
+                "address": "azurerm_virtual_network.main",
+                "type": "azurerm_virtual_network",
+                "change": {
+                  "actions": ["create"]
+                }
+              },
+              {
+                "address": "azurerm_subnet.app_subnet",
+                "type": "azurerm_subnet",
+                "change": {
+                  "actions": ["create"]
+                }
+              },
+              {
+                "address": "azurerm_network_security_group.app_nsg",
+                "type": "azurerm_network_security_group",
+                "change": {
+                  "actions": ["create"]
+                }
+              },
+              {
+                "address": "azurerm_storage_account.app_storage",
+                "type": "azurerm_storage_account",
+                "change": {
+                  "actions": ["create"]
+                }
+              },
+              {
+                "address": "azurerm_app_service_plan.app_service_plan",
+                "type": "azurerm_app_service_plan",
+                "change": {
+                  "actions": ["create"]
+                }
+              },
+              {
+                "address": "azurerm_app_service.web_app",
+                "type": "azurerm_app_service",
+                "change": {
+                  "actions": ["create"]
                 }
               }
             ]
@@ -67,17 +88,26 @@ jobs:
           echo "Status: $HTTP_STATUS"
           echo "Response: $RESPONSE_BODY"
           
-          # Set outputs for conditional steps
-          echo "decision=$(echo '$RESPONSE_BODY' | jq -r '.decision')" >> $GITHUB_OUTPUT
-          echo "summary=$(echo '$RESPONSE_BODY' | jq -r '.summary')" >> $GITHUB_OUTPUT
-          echo "risk_level=$(echo '$RESPONSE_BODY' | jq -r '.risk_level')" >> $GITHUB_OUTPUT
+          # Set outputs for conditional steps with error handling
+          if echo "$RESPONSE_BODY" | jq -e . >/dev/null 2>&1; then
+            echo "decision=$(echo "$RESPONSE_BODY" | jq -r '.decision // "UNKNOWN"')" >> $GITHUB_OUTPUT
+            echo "summary=$(echo "$RESPONSE_BODY" | jq -r '.summary // "No summary available"')" >> $GITHUB_OUTPUT
+            echo "risk_level=$(echo "$RESPONSE_BODY" | jq -r '.risk_level // "UNKNOWN"')" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Invalid JSON response received"
+            echo "Raw response: $RESPONSE_BODY"
+            echo "decision=ERROR" >> $GITHUB_OUTPUT
+            echo "summary=Invalid JSON response" >> $GITHUB_OUTPUT
+            echo "risk_level=ERROR" >> $GITHUB_OUTPUT
+          fi
 
           # Show result but don't fail the step (so we can test conditional logic)
           if [ "$HTTP_STATUS" = "200" ]; then
-            echo "✅ Safety Gate APPROVED (unexpected!)"
+            echo "✅ Safety Gate APPROVED (expected!)"
+            echo "Safe plan with only creates and updates"
           else
-            echo "❌ Safety Gate BLOCKED (expected)"
-            echo "Critical issues detected in the plan"
+            echo "❌ Safety Gate BLOCKED (unexpected)"
+            echo "This plan should have been approved"
           fi
 
       - name: Proceed with Deployment (Only if Approved)
@@ -87,8 +117,8 @@ jobs:
           echo "Risk Level: ${{ steps.test-safety-gate.outputs.risk_level }}"
           echo "Summary: ${{ steps.test-safety-gate.outputs.summary }}"
           echo ""
-          echo "This step should NOT run because the plan contains critical deletions!"
-          echo "If you see this message, something is wrong with the safety gate."
+          echo "✅ This step should run because the plan contains only safe operations!"
+          echo "Creating new resources and updating existing ones is allowed."
 
       - name: Deployment Blocked
         if: steps.test-safety-gate.outputs.decision == 'BLOCK'
@@ -98,18 +128,18 @@ jobs:
           echo "Risk Level: ${{ steps.test-safety-gate.outputs.risk_level }}"
           echo "Summary: ${{ steps.test-safety-gate.outputs.summary }}"
           echo ""
-          echo "✅ This is the expected behavior for plans with critical resource deletions"
+          echo "❌ This should NOT happen for plans with only safe operations"
 
       - name: Show Test Results
         if: always()
         run: |
           echo "=== TEST RESULTS ==="
-          echo "Expected: BLOCK decision with HTTP 400"
+          echo "Expected: APPROVE decision with HTTP 200"
           echo "Actual Decision: ${{ steps.test-safety-gate.outputs.decision }}"
           echo "Actual Risk Level: ${{ steps.test-safety-gate.outputs.risk_level }}"
           echo ""
-          if [ "${{ steps.test-safety-gate.outputs.decision }}" = "BLOCK" ]; then
-            echo "✅ TEST PASSED: Safety gate correctly blocked dangerous plan"
+          if [ "${{ steps.test-safety-gate.outputs.decision }}" = "APPROVE" ]; then
+            echo "✅ TEST PASSED: Safety gate correctly approved safe plan"
           else
-            echo "❌ TEST FAILED: Safety gate should have blocked this plan"
+            echo "❌ TEST FAILED: Safety gate should have approved this plan"
           fi
